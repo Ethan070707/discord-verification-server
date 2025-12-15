@@ -1,0 +1,235 @@
+{
+  "name": "Discord Interaction Handler (Verified)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-verified",
+        "responseMode": "immediately",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "id": "webhook-verified",
+      "name": "Webhook (Verified)",
+      "webhookId": "discord-verified-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Request is already verified by Vercel server\n// Just parse and return the data\n\nconst interaction = $input.item.json;\n\nconsole.log('✅ Verified interaction received');\nconsole.log('Type:', interaction.type);\nconsole.log('Custom ID:', interaction.data?.custom_id);\n\nconst interactionData = interaction.data || {};\nconst customId = interactionData.custom_id || '';\nconst messageId = interaction.message?.id || '';\nconst channelId = interaction.channel_id || '';\nconst userId = interaction.member?.user?.id || interaction.user?.id || '';\nconst username = interaction.member?.user?.username || interaction.user?.username || 'Unknown';\n\nconst message = interaction.message;\nconst embed = message?.embeds?.[0] || {};\nconst messageContent = message?.content || '';\n\nreturn {\n  json: {\n    interaction_type: interaction.type,\n    custom_id: customId,\n    message_id: messageId,\n    channel_id: channelId,\n    user_id: userId,\n    username: username,\n    message_content: messageContent,\n    embed_description: embed.description || '',\n    interaction_token: interaction.token,\n    application_id: interaction.application_id\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "id": "parse-interaction",
+      "name": "Parse Interaction Data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-approve",
+              "leftValue": "={{ $json.custom_id }}",
+              "rightValue": "approve_email",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0],
+      "id": "check-button",
+      "name": "Check Button"
+    },
+    {
+      "parameters": {
+        "jsCode": "const messageContent = $input.item.json.message_content || '';\nconst embedDesc = $input.item.json.embed_description || '';\n\nconst fullText = messageContent + '\\n' + embedDesc;\n\nfunction extractField(text, pattern) {\n  const match = text.match(pattern);\n  return match ? match[1].trim() : '';\n}\n\nconst vessel = extractField(fullText, /VESSEL:\\s*(.+)/i);\nconst time = extractField(fullText, /TIME:\\s*(.+)/i);\nconst movement = extractField(fullText, /MOVEMENT:\\s*(.+)/i);\nconst route = extractField(fullText, /ROUTE:\\s*(.+)/i);\nconst contact = extractField(fullText, /Contact:\\s*(.+)/i);\nconst company = extractField(fullText, /Company:\\s*(.+)/i);\nconst email = extractField(fullText, /Email:\\s*(.+)/i);\nconst ops = extractField(fullText, /Ops:\\s*(.+)/i);\n\nreturn {\n  json: {\n    vessel_name: vessel,\n    date_time: time,\n    movement_type: movement,\n    route: route,\n    principal_pic: contact,\n    principal_company: company,\n    email_recipients: email,\n    ops_contacts: ops,\n    channel_id: $input.item.json.channel_id,\n    message_id: $input.item.json.message_id,\n    interaction_token: $input.item.json.interaction_token,\n    application_id: $input.item.json.application_id,\n    username: $input.item.json.username\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, -100],
+      "id": "extract-vessel-info",
+      "name": "Extract Vessel Info from Message"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email_recipients }}",
+        "subject": "=Pilot Start 船舶动态通知 - {{ $json.vessel_name }}",
+        "emailType": "text",
+        "message": "=** AUTOMATED MESSAGE - PLEASE DO NOT REPLY **\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\nDear {{ $json.principal_pic }},\\n\\nThis is to inform you about the pilot boarding for vessel {{ $json.vessel_name }}.\\n\\nTime: {{ $json.date_time }}\\nMovement: {{ $json.movement_type }}\\nRoute: {{ $json.route }}\\nContact: {{ $json.ops_contacts }}\\n\\nApproved by: {{ $json.username }}\\n\\nBest regards,\\nSingunion Agency",
+        "options": {
+          "appendAttribution": false,
+          "ccList": "AGENCY@SINGUNION.COM.SG",
+          "senderName": "Singunion Agency - Auto / 不要回复 DO NOT REPLY"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [880, -100],
+      "id": "send-email",
+      "name": "Send Email to Principal",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "lcdZxLpqWQOnJxcD",
+          "name": "Agency Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://discord.com/api/v10/channels/{{ $json.channel_id }}/messages/{{ $json.message_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\\n  \\\"content\\\": \\\"✅ **APPROVED by @{{ $json.username }}**\\\\n\\\\nEmail has been sent to {{ $json.email_recipients }}\\\",\\n  \\\"components\\\": []\\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1100, -100],
+      "id": "update-approved",
+      "name": "Update Discord Message - Approved",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "WFtgOqquUC7bWnth",
+          "name": "Discord Boarding Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://discord.com/api/v10/channels/{{ $json.channel_id }}/messages/{{ $json.message_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\\n  \\\"content\\\": \\\"❌ **REJECTED by @{{ $json.username }}**\\\\n\\\\nNo email was sent.\\\",\\n  \\\"components\\\": []\\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [660, 100],
+      "id": "update-rejected",
+      "name": "Update Discord Message - Rejected",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "WFtgOqquUC7bWnth",
+          "name": "Discord Boarding Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook (Verified)": {
+      "main": [
+        [
+          {
+            "node": "Parse Interaction Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Interaction Data": {
+      "main": [
+        [
+          {
+            "node": "Check Button",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Button": {
+      "main": [
+        [
+          {
+            "node": "Extract Vessel Info from Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Discord Message - Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Vessel Info from Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email to Principal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email to Principal": {
+      "main": [
+        [
+          {
+            "node": "Update Discord Message - Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
