@@ -20,8 +20,6 @@ module.exports = async (req, res) => {
 
   console.log('='.repeat(50));
   console.log('Discord Request Received');
-  console.log('Signature:', signature);
-  console.log('Timestamp:', timestamp);
   console.log('Body type:', req.body.type);
   console.log('='.repeat(50));
 
@@ -35,59 +33,39 @@ module.exports = async (req, res) => {
 
   console.log('✅ Signature valid');
 
-  // Handle PING (type 1) - respond immediately
+  // Handle PING (type 1)
   if (req.body.type === 1) {
     console.log('✅ PING detected - Responding with PONG');
     return res.status(200).json({ type: 1 });
   }
 
-  // For button interactions (type 3), acknowledge and forward to n8n
+  // Handle Button interactions (type 3)
   if (req.body.type === 3) {
     console.log('🔵 Button interaction detected');
     
-    // Forward to n8n in background (don't await)
-    fetch(N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(req.body)
-    }).then(() => {
-      console.log('✅ Forwarded to n8n successfully');
-    }).catch((error) => {
-      console.error('❌ Error forwarding to n8n:', error);
-    });
+    // IMPORTANT: Must await to ensure request completes before function terminates
+    try {
+      const response = await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(req.body)
+      });
+      console.log('✅ Forwarded to n8n, status:', response.status);
+    } catch (error) {
+      console.error('❌ Error forwarding to n8n:', error.message);
+    }
 
-    // Return type 6 - Acknowledge the interaction without showing "thinking"
-    // n8n will update the message via PATCH request
+    // Return type 6 - Acknowledge without showing "thinking"
     return res.status(200).json({
       type: 6
     });
   }
 
-  // For other interactions, forward to n8n
+  // For other interaction types
   console.log('🔵 Other interaction type:', req.body.type);
-  
-  try {
-    fetch(N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(req.body)
-    });
-
-    return res.status(200).json({
-      type: 6
-    });
-  } catch (error) {
-    console.error('❌ Error:', error);
-    return res.status(200).json({
-      type: 4,
-      data: {
-        content: '❌ Error processing request. Please try again.',
-        flags: 64
-      }
-    });
-  }
+  return res.status(200).json({
+    type: 6
+  });
 };
