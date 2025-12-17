@@ -1,6 +1,5 @@
 // Discord Interactions Verification Server
 // Deploy to Vercel
-
 const { verifyKey } = require('discord-interactions');
 
 // Your Discord Application Public Key
@@ -42,11 +41,35 @@ module.exports = async (req, res) => {
     return res.status(200).json({ type: 1 });
   }
 
+  // For button interactions (type 3), acknowledge and forward to n8n
+  if (req.body.type === 3) {
+    console.log('🔵 Button interaction detected');
+    
+    // Forward to n8n in background (don't await)
+    fetch(N8N_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(req.body)
+    }).then(() => {
+      console.log('✅ Forwarded to n8n successfully');
+    }).catch((error) => {
+      console.error('❌ Error forwarding to n8n:', error);
+    });
+
+    // Return type 6 - Acknowledge the interaction without showing "thinking"
+    // n8n will update the message via PATCH request
+    return res.status(200).json({
+      type: 6
+    });
+  }
+
   // For other interactions, forward to n8n
-  console.log('🔵 Forwarding to n8n...');
+  console.log('🔵 Other interaction type:', req.body.type);
   
   try {
-    const response = await fetch(N8N_WEBHOOK_URL, {
+    fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -54,25 +77,11 @@ module.exports = async (req, res) => {
       body: JSON.stringify(req.body)
     });
 
-    if (!response.ok) {
-      console.log('❌ n8n webhook failed:', response.status);
-      return res.status(200).json({
-        type: 4,
-        data: {
-          content: '❌ Error processing request. Please try again.',
-          flags: 64
-        }
-      });
-    }
-
-    console.log('✅ Forwarded to n8n successfully');
-    
     return res.status(200).json({
-      type: 5
+      type: 6
     });
-
   } catch (error) {
-    console.error('❌ Error forwarding to n8n:', error);
+    console.error('❌ Error:', error);
     return res.status(200).json({
       type: 4,
       data: {
