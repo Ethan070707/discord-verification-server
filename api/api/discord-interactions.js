@@ -7,7 +7,7 @@ const { verifyKey } = require('discord-interactions');
 const PUBLIC_KEY = 'd2a5d73af62f88dce750fd3903d9c61a6b4df15d9ee1297a00e8ac4f4333b6cd';
 
 // Your n8n webhook URL
-const N8N_WEBHOOK_URL = 'https://ctlee0712.app.n8n.cloud/webhook/discord-verified';
+const N8N_WEBHOOK_URL = 'https://ctlee0712.app.n8n.cloud/webhook/discord-interactions';
 
 module.exports = async (req, res) => {
   // Only accept POST requests
